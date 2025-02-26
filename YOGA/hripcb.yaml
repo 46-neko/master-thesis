@@ -1,0 +1,13 @@
+train: ./hripcb/train/images
+val: ./hripcb/valid/images
+test: ./hripcb/test/images
+
+nc: 6
+names: ['missing_hole', 'mouse_bite', 'open_circuit', 'short', 'spur', 'spurious_copper']
+
+roboflow:
+  workspace: ma007
+  project: hripcb
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/ma007/hripcb/dataset/3
