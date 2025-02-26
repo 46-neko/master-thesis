@@ -1,0 +1,39 @@
+Test benchmark on Val Dataset
+{
+  "nparam": 28237378,
+  "detailed_flops": {
+    "aten::sub": 0.000819205,
+    "conv": 2.7787264,
+    "aten::add": 0.014532001,
+    "aten::floor_divide": 1.34e-07,
+    "aten::mul": 0.019207344,
+    "norm": 0.068096,
+    "linear": 30.4461824,
+    "matmul": 8.6016,
+    "softmax": 0.682944,
+    "dropout": 0.0332544,
+    "batchnorm": 0.008192,
+    "aten::pow": 0.000409728,
+    "aten::div": 0.000854533,
+    "elementwise": 1.6e-06,
+    "aten::sum": 1.6e-07,
+    "aten::cumsum": 1e-09,
+    "aten::relu": 0.0032,
+    "aten::sin": 7.68e-05,
+    "aten::cos": 7.68e-05,
+    "bmm": 0.13824
+  },
+  "flops": {
+    "mean": 42.79641350600001,
+    "std": 7.105427357601002e-15,
+    "min": 42.796413506,
+    "max": 42.796413506
+  },
+  "time": {
+    "mean": 0.014565307299296061,
+    "std": 2.955232602044549e-05,
+    "min": 0.014514517784118653,
+    "max": 0.014620780944824219
+  },
+  "fps": 68.65629261720622
+}
