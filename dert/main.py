@@ -10,6 +10,9 @@ import numpy as np
 import torch
 from fvcore.nn import FlopCountAnalysis, parameter_count_table
 from torch.utils.data import DataLoader, DistributedSampler
+import torchvision.transforms as T
+from PIL import Image
+import os
 
 import datasets
 import util.misc as utils
@@ -192,6 +195,46 @@ def main(args):
         
         test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
                                               data_loader_val, base_ds, device, args.output_dir)
+        
+        transform = T.Compose([
+            T.Resize(800),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+        
+        def predict(image):
+            img_tensor = transform(image).unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                outputs = model(img_tensor)
+
+            return outputs
+
+        def measure_fps(image_path):
+            image = Image.open(image_path).convert("RGB")
+
+            start_time = time.time()
+            predict(image)
+            end_time = time.time()
+            pred_time = (end_time - start_time)
+            print(f"Predicted one image with time {pred_time:.2f}")
+            fps = 1 / pred_time
+            print(f"FPS: {fps:.2f}")
+            return fps
+
+        def process_folder(folder_path):
+            print("Measuring FPS...")
+            image_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith(('png', 'jpg', 'jpeg'))]
+
+            total_fps = 0
+            
+            for image_file in image_files:
+                total_fps += measure_fps(image_file)
+            avg_fps = (total_fps / len(image_files))
+            print("Finished processing all images.")
+            print(f"Average FPS: {avg_fps:.2f}")
+            
+        process_folder("../datasets/hripcb/train/test2017/")
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
         return
