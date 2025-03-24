@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader, DistributedSampler
 import torchvision.transforms as T
 from PIL import Image
 import os
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 import datasets
 import util.misc as utils
@@ -104,6 +106,36 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     return parser
 
+
+def visualize_bboxes(image, bboxes, labels, scores):
+    # Criar um plot
+    fig, ax = plt.subplots(1)
+    ax.imshow(image)
+
+    # Pegar dimensões da imagem
+    img_width, img_height = image.size if hasattr(image, 'size') else (image.shape[1], image.shape[0])
+
+    # Converter tensores da GPU para numpy
+    bboxes = bboxes.cpu().numpy()
+    labels = labels.cpu().numpy()
+    scores = scores.cpu().numpy()
+
+    # Verificar se as bounding boxes precisam ser convertidas
+    for box, label, score in zip(bboxes, labels, scores):
+        # Verificar se as coordenadas já estão na escala da imagem
+        if box.max() <= 1.0:  # Provavelmente está normalizado, então convertemos
+            xmin, ymin, xmax, ymax = box * [img_width, img_height, img_width, img_height]
+        else:  # Se já estiver na escala de pixels, não multiplicamos
+            xmin, ymin, xmax, ymax = box
+
+        print(f"Box: ({xmin:.2f}, {ymin:.2f}, {xmax:.2f}, {ymax:.2f}), Label: {label}, Score: {score:.2f}")
+
+        # Adicionar bounding box
+        rect = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, linewidth=1, edgecolor='r', facecolor='none')
+        ax.add_patch(rect)
+        ax.text(xmin, ymin, f'{label}: {score:.2f}', color='r', fontsize=8, backgroundcolor='white')
+
+    plt.show()
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -202,19 +234,39 @@ def main(args):
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
         
-        def predict(image):
+        def predict(image, model, device, confidence_threshold=0.9):
+            transform = T.Compose([
+                T.Resize(800),
+                T.ToTensor(),
+                T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
             img_tensor = transform(image).unsqueeze(0).to(device)
 
             with torch.no_grad():
                 outputs = model(img_tensor)
 
-            return outputs
+            probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
+            keep = probas.max(-1).values > confidence_threshold
+
+            bboxes_scaled = outputs['pred_boxes'][0, keep]
+
+            bboxes = bboxes_scaled.clone()
+            bboxes[:, 0] = bboxes_scaled[:, 0] - bboxes_scaled[:, 2] / 2
+            bboxes[:, 1] = bboxes_scaled[:, 1] - bboxes_scaled[:, 3] / 2
+            bboxes[:, 2] = bboxes_scaled[:, 0] + bboxes_scaled[:, 2] / 2
+            bboxes[:, 3] = bboxes_scaled[:, 1] + bboxes_scaled[:, 3] / 2
+
+            scores, labels = probas[keep].max(-1)
+
+            return bboxes, labels, scores
+
+
 
         def measure_fps(image_path):
             image = Image.open(image_path).convert("RGB")
 
             start_time = time.time()
-            predict(image)
+            predict(image, model, device)
             end_time = time.time()
             pred_time = (end_time - start_time)
             print(f"Predicted one image with time {pred_time:.2f}")
@@ -235,6 +287,12 @@ def main(args):
             print(f"Average FPS: {avg_fps:.2f}")
             
         process_folder("../datasets/hripcb/train/test2017/")
+        image_path = "./image.jpg"
+        image = Image.open(image_path).convert("RGB")
+        bboxes, labels, scores = predict(image, model, device)
+        visualize_bboxes(image, bboxes, labels, scores)
+
+
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
         return
